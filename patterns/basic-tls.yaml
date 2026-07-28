@@ -1,0 +1,34 @@
+# The baseline pattern: HTTPS ingress with an automatically issued and
+# renewed Let's Encrypt certificate.
+#
+# How the pieces connect:
+#   - `cert-manager.io/cluster-issuer` tells cert-manager to create a
+#     Certificate for the hosts in `tls`.
+#   - `secretName` is where cert-manager stores the issued cert; the
+#     Ingress reads TLS material from the same Secret.
+#   - ingress-nginx redirects HTTP -> HTTPS automatically when a `tls`
+#     section is present (ssl-redirect defaults to true).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  namespace: app
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - app.example.com
+      secretName: app-example-com-tls
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80

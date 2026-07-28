@@ -1,0 +1,76 @@
+# Wildcard certificate via DNS-01.
+#
+# HTTP-01 cannot issue wildcards — Let's Encrypt requires DNS-01 for
+# `*.example.com`. DNS-01 proves control by publishing a TXT record, so
+# cert-manager needs API credentials for your DNS provider.
+#
+# This example uses Cloudflare; cert-manager ships solvers for Route53,
+# CloudDNS, AzureDNS and others — the solver stanza is the only part that
+# changes. Create the token Secret first (Zone:DNS:Edit permission,
+# scoped to the one zone):
+#
+#   kubectl -n cert-manager create secret generic cloudflare-api-token \
+#     --from-literal=api-token=<token>
+#
+# When to prefer wildcard over per-host certs: many short-lived subdomains
+# (preview environments, per-tenant hosts) where per-host issuance would
+# hammer rate limits and add minutes to every environment spin-up.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-dns01
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: platform@example.com
+    privateKeySecretRef:
+      name: letsencrypt-dns01-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+        selector:
+          dnsZones:
+            - example.com
+---
+# Explicit Certificate resource (wildcards can't be requested through
+# Ingress annotations alone). The resulting Secret is then referenced by
+# any number of Ingresses in this namespace.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-example-com
+  namespace: app
+spec:
+  secretName: wildcard-example-com-tls
+  issuerRef:
+    name: letsencrypt-dns01
+    kind: ClusterIssuer
+  dnsNames:
+    - "example.com"
+    - "*.example.com"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: preview
+  namespace: app
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - pr-123.example.com
+      secretName: wildcard-example-com-tls
+  rules:
+    - host: pr-123.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: preview-pr-123
+                port:
+                  number: 80

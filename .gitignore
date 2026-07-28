@@ -1,0 +1,18 @@
+# Editors / IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Local scratch files
+*.local.yaml
+*.local.yml
+kubeconfig*
+*.kubeconfig
+
+# Secrets — never commit rendered secrets
+*.key
+*.pem
+secrets/

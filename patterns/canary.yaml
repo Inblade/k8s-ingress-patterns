@@ -1,0 +1,64 @@
+# Weighted canary with ingress-nginx.
+#
+# Two Ingresses for the same host: the stable one is a plain Ingress; the
+# canary one carries `nginx.ingress.kubernetes.io/canary: "true"` and a
+# weight. ingress-nginx splits traffic between the two backends.
+#
+# Operating notes:
+#   - Exactly one canary Ingress per stable Ingress (host+path pair) —
+#     ingress-nginx ignores additional ones.
+#   - Progress a rollout by patching canary-weight: 5 -> 25 -> 50 -> 100,
+#     then swap the stable Service's image/selector and delete the canary.
+#   - `canary-by-header` (below, commented) overrides the weight for
+#     targeted testing: send `X-Canary: always` to force the canary path.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-stable
+  namespace: app
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - app.example.com
+      secretName: app-example-com-tls
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-stable
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-canary
+  namespace: app
+  annotations:
+    nginx.ingress.kubernetes.io/canary: "true"
+    # 10% of requests go to web-canary; the rest to web-stable.
+    nginx.ingress.kubernetes.io/canary-weight: "10"
+    # Optional: force canary per-request regardless of weight.
+    # nginx.ingress.kubernetes.io/canary-by-header: "X-Canary"
+    # Optional: sticky canary by cookie (value "always"/"never").
+    # nginx.ingress.kubernetes.io/canary-by-cookie: "canary"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-canary
+                port:
+                  number: 80

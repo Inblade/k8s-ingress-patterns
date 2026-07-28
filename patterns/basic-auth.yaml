@@ -1,0 +1,43 @@
+# HTTP Basic Auth at the ingress — the 5-minute way to gate a staging
+# environment or an internal dashboard that has no auth of its own.
+#
+# Create the htpasswd Secret first (the key inside the Secret MUST be
+# named `auth`):
+#
+#   htpasswd -c auth staging-user        # prompts for password
+#   kubectl -n app create secret generic staging-basic-auth \
+#     --from-file=auth
+#   rm auth
+#
+# Not a substitute for real authentication on production apps — combine
+# with `whitelist-source-range` for defense in depth, or graduate to
+# oauth2-proxy (`auth-url`/`auth-signin` annotations) for SSO.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: staging-web
+  namespace: app
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: staging-basic-auth
+    nginx.ingress.kubernetes.io/auth-realm: "Authentication Required"
+    # Optional second layer: only allow the office/VPN range at all.
+    # nginx.ingress.kubernetes.io/whitelist-source-range: "203.0.113.0/24"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - staging.example.com
+      secretName: staging-example-com-tls
+  rules:
+    - host: staging.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80

@@ -1,0 +1,47 @@
+# Per-client rate limiting at the edge with ingress-nginx.
+#
+# What the annotations mean:
+#   - limit-rps: requests per second per client IP (nginx leaky bucket).
+#   - limit-burst-multiplier: burst = rps * multiplier (default 5);
+#     requests inside the burst queue, beyond it get 503.
+#   - limit-connections: concurrent connections per client IP.
+#   - limit-whitelist: CIDRs exempt from all limits (health checkers,
+#     office/VPN egress, partner integrations).
+#
+# Caveats that matter in production:
+#   - Limits are enforced *per nginx replica*: with 3 controller pods the
+#     effective cluster-wide rate is up to 3x the annotation value.
+#   - "Client IP" depends on correct real-IP configuration. Behind a cloud
+#     LB, set externalTrafficPolicy: Local and/or enable use-forwarded-headers
+#     in the controller ConfigMap — otherwise you rate-limit the LB itself
+#     and take the whole site down at once.
+#   - This is abuse protection, not billing-grade quota. For per-token API
+#     quotas use an API gateway.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api
+  namespace: app
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "3"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
+    nginx.ingress.kubernetes.io/limit-whitelist: "10.0.0.0/8,203.0.113.0/24"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.example.com
+      secretName: api-example-com-tls
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 80

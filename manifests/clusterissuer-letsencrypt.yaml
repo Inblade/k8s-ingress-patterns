@@ -1,0 +1,38 @@
+# cert-manager ClusterIssuers for Let's Encrypt: staging + production.
+#
+# Always wire new Ingresses to *staging* first. Staging has generous rate
+# limits and lets you verify the whole HTTP-01 path (ingress class, DNS,
+# firewall) without burning production quota — LE production limits
+# certificates per registered domain per week, and hitting that limit
+# during a broken rollout locks you out for days.
+#
+# The only difference between the two issuers is the ACME server URL.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: platform@example.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: platform@example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
